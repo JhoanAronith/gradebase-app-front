@@ -1,0 +1,70 @@
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Notas</h2>
+    <button class="btn btn-danger">Salir</button>
+  </div>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <input class="form-control" placeholder="Curso (CS101)">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" placeholder="Sección (A)">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" placeholder="Código estudiante (STU100)">
+    </div>
+    <div class="col-md-3">
+      <button class="btn btn-primary w-100">Filtrar</button>
+    </div>
+  </div>
+
+  <div class="mb-2">
+    <button class="btn btn-outline-secondary me-2">CSV</button>
+    <button class="btn btn-outline-secondary me-2">XLSX</button>
+    <button class="btn btn-outline-secondary">PDF</button>
+  </div>
+
+  <div class="mb-2">
+    <button class="btn btn-info me-2">ML: Proyección</button>
+    <button class="btn btn-warning">ML: Riesgo</button>
+  </div>
+
+  <table class="table table-bordered table-striped mt-3">
+    <thead class="table-light">
+      <tr>
+        <th>Código</th>
+        <th>Alumno</th>
+        <th>Curso</th>
+        <th>Sección</th>
+        <th>Av1</th>
+        <th>Av2</th>
+        <th>Av3</th>
+        <th>Part</th>
+        <th>Proyecto</th>
+        <th>Final</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Aquí van las filas de notas -->
+      <tr>
+        <td>STU100</td>
+        <td>Pérez, Juan</td>
+        <td>CS101</td>
+        <td>A</td>
+        <td>15</td>
+        <td>16</td>
+        <td>17</td>
+        <td>18</td>
+        <td>19</td>
+        <td>18</td>
+      </tr>
+      <!-- Más filas de ejemplo -->
+    </tbody>
+  </table>
+
+  <div class="mt-4 border rounded p-3">
+    <h3>Resultado ML</h3>
+    <p>Aquí se mostrarán los resultados del análisis de Machine Learning.</p>
+  </div>
+</div>
