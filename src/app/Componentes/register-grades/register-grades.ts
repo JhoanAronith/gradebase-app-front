@@ -1,10 +1,12 @@
 import { Component } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-register-grades',
-  imports: [],
+  standalone: true,
+  imports: [RouterLink],
   templateUrl: './register-grades.html',
-  styleUrl: './register-grades.css'
+  styleUrls: ['./register-grades.css']
 })
 export class RegisterGrades {
 

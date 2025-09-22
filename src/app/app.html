@@ -1,2 +1,12 @@
-<app-nav-bar></app-nav-bar>
-<router-outlet />
+@if (showNavBar) {
+  <app-nav-bar></app-nav-bar>
+}
+
+<div class="d-flex">
+  @if (showNavBarGrades) {
+    <app-nav-bar-grades></app-nav-bar-grades>
+  }
+  <div class="flex-grow-1">
+    <router-outlet></router-outlet>
+  </div>
+</div>
