@@ -9,8 +9,11 @@
       <label for="password" class="form-label">Contraseña</label>
       <input [(ngModel)]="password" name="password" id="password" type="password" class="form-control" required />
     </div>
-    <button type="submit" class="btn btn-primary w-100 mb-2">Ingresar</button>
+    <!-- Solo usar cuando el backend ya esté listo
+      <button type="submit" class="btn btn-primary w-100 mb-2">Ingresar</button>
+    -->
+    <a href="/registerGrades" class="btn btn-primary w-100 mb-2">Ingresar</a>
   </form>
-  <button type="button" class="btn btn-secondary w-100">Registrarse</button>
+  <a href="/register" class="btn btn-secondary w-100">Registrarme</a>
   <div *ngIf="error" class="alert alert-danger mt-3 text-center">{{ error }}</div>
 </div>
