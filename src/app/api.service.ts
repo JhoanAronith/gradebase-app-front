@@ -3,22 +3,6 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { map } from 'rxjs/operators';
 import { API_CONFIG } from './api.config';
 
-export interface NotaRow {
-  id: number;
-  estudiante: number;
-  seccion: number;
-  avance1: number | null;
-  avance2: number | null;
-  avance3: number | null;
-  participacion: number | null;
-  proyecto_final: number | null;
-  nota_final: number | null;
-  estudiante_codigo?: string;
-  estudiante_nombre?: string;
-  seccion_nombre?: string;
-  curso_codigo?: string;
-}
-
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private base = API_CONFIG.baseUrl;
@@ -33,12 +17,120 @@ export class ApiService {
     });
     return p;
   }
+
   private unwrapArray<T = any>() {
+    // DRF: puede venir {results: []} o []
     return map((r: any) => (Array.isArray(r) ? (r as T[]) : (r?.results ?? [])));
   }
 
-  // ----------------- auth / registro -----------------
-  /** Registro público de DOCENTE */
+  // ----------------- catálogos -----------------
+  secciones(page_size = 1000) {
+    const params = this.toParams({ page_size });
+    return this.http.get<any[]>(`${this.base}/secciones/`, { params }).pipe(this.unwrapArray());
+  }
+
+  estudiantes(seccionId?: number, page_size = 1000) {
+    const params = this.toParams({ seccion: seccionId, page_size });
+    return this.http.get<any[]>(`${this.base}/estudiantes/`, { params }).pipe(this.unwrapArray());
+  }
+
+  // ----------------- notas (listado) -----------------
+  notas(q: { curso?: string; seccionId?: number; codigo?: string; page?: number; page_size?: number } = {}) {
+    const params = this.toParams({
+      seccion: q.seccionId,
+      'seccion__curso__codigo': q.curso,
+      'estudiante__codigo': q.codigo,
+      page: q.page,
+      page_size: q.page_size ?? 1000
+    });
+    return this.http.get<{ count: number; next: string | null; previous: string | null; results: any[] }>(
+      `${this.base}/notas/`, { params }
+    );
+  }
+
+  // -------- mapeo DTO front -> payload backend --------
+  private mapNotaPayload(d: {
+    seccionId?: number;
+    estudianteId?: number;
+    av1?: number | null;
+    av2?: number | null;
+    av3?: number | null;
+    participacion?: number | null;
+    proyecto?: number | null;
+    final?: number | null;
+  }) {
+    const p: any = {};
+    const add = (k: string, v: any) => { if (v !== undefined && v !== null) p[k] = v; };
+
+    if (d.seccionId !== undefined) p.seccion = d.seccionId;
+    if (d.estudianteId !== undefined) p.estudiante = d.estudianteId;
+
+    add('avance1', d.av1);
+    add('avance2', d.av2);
+    add('avance3', d.av3);
+    add('participacion', d.participacion);
+    add('proyecto_final', d.proyecto);
+    add('nota_final', d.final);
+
+    return p;
+  }
+
+  // ----------------- notas CRUD -----------------
+  crearNota(d: {
+    seccionId: number;
+    estudianteId: number;
+    av1?: number | null;
+    av2?: number | null;
+    av3?: number | null;
+    participacion?: number | null;
+    proyecto?: number | null;
+    final?: number | null;
+  }) {
+    const payload = this.mapNotaPayload(d);
+    return this.http.post<any>(`${this.base}/notas/`, payload);
+  }
+
+  // Usar PATCH para actualización parcial (evita 400 por campos faltantes en PUT)
+  actualizarNota(id: number, d: {
+    seccionId?: number;
+    estudianteId?: number;
+    av1?: number | null;
+    av2?: number | null;
+    av3?: number | null;
+    participacion?: number | null;
+    proyecto?: number | null;
+    final?: number | null;
+  }) {
+    const payload = this.mapNotaPayload(d);
+    return this.http.patch<any>(`${this.base}/notas/${id}/`, payload);
+  }
+
+  eliminarNota(id: number) {
+    return this.http.delete<void>(`${this.base}/notas/${id}/`);
+  }
+
+  // ----------------- exportaciones -----------------
+  exportNotas(format: 'csv' | 'xlsx' | 'pdf', q: { curso?: string; seccion?: string; codigo?: string }) {
+    const path = format === 'csv' ? 'export/csv' : format === 'xlsx' ? 'export/xlsx' : 'export/pdf';
+    const params = this.toParams({ curso: q.curso, seccion: q.seccion, codigo: q.codigo });
+    return this.http.get(`${this.base}/notas/${path}/`, { params, responseType: 'blob' });
+  }
+
+  // Alias para compatibilidad con el componente (usa exportar)
+  exportar(format: 'csv' | 'xlsx' | 'pdf', q: { curso?: string; seccion?: string; codigo?: string }) {
+    return this.exportNotas(format, q);
+  }
+
+  // ----------------- ML opcional -----------------
+  mlProyeccion(payload: { curso?: string; seccion?: string; seccion_id?: number }) {
+    return this.http.post<any>(`${this.base}/notas/ml/proyeccion/`, payload);
+  }
+
+  mlRiesgo(payload: { curso?: string; seccion?: string; seccion_id?: number }) {
+    return this.http.post<any>(`${this.base}/notas/ml/riesgo/`, payload);
+  }
+
+  // ----------------- registro de docente -----------------
   registerDocente(payload: {
     username: string;
     password: string;
@@ -46,108 +138,7 @@ export class ApiService {
     nombre: string;
     apellido: string;
   }) {
-    return this.http.post<{ message: string; username: string }>(
-      `${this.base}/auth/register/`,
-      payload
-    );
-  }
-
-  // ----------------- catálogos -----------------
-  secciones() {
-    return this.http
-      .get<any>(`${this.base}/secciones/`, { params: this.toParams({ page_size: 1000 }) })
-      .pipe(this.unwrapArray());
-  }
-
-  estudiantes(seccionId: number) {
-    return this.http
-      .get<any>(`${this.base}/estudiantes/`, {
-        params: this.toParams({ seccion: seccionId, page_size: 1000 }),
-      })
-      .pipe(this.unwrapArray());
-  }
-
-  // ----------------- notas -----------------
-  notas(q: { curso?: string; seccionId?: number; codigo?: string; page?: number; page_size?: number } = {}) {
-    const params = this.toParams({
-      'seccion__curso__codigo': q.curso,
-      'seccion': q.seccionId,
-      'estudiante__codigo': q.codigo,
-      page: q.page ?? 1,
-      page_size: q.page_size ?? 1000,
-    });
-    return this.http.get<any>(`${this.base}/notas/`, { params });
-  }
-
-  crearNota(dto: {
-    seccionId: number;
-    estudianteId: number;
-    av1?: number | string;
-    av2?: number | string;
-    av3?: number | string;
-    participacion?: number | string;
-    proyecto?: number | string;
-    final?: number | string;
-  }) {
-    const payload: any = {
-      seccion: dto.seccionId,
-      estudiante: dto.estudianteId,
-      avance1: dto.av1 === '' ? null : Number(dto.av1),
-      avance2: dto.av2 === '' ? null : Number(dto.av2),
-      avance3: dto.av3 === '' ? null : Number(dto.av3),
-      participacion: dto.participacion === '' ? null : Number(dto.participacion),
-      proyecto_final: dto.proyecto === '' ? null : Number(dto.proyecto),
-      nota_final: dto.final === '' ? null : Number(dto.final),
-    };
-    Object.keys(payload).forEach(
-      (k) => (payload[k] === null || payload[k] === undefined) && delete payload[k]
-    );
-    return this.http.post<NotaRow>(`${this.base}/notas/`, payload);
-  }
-
-  actualizarNota(
-    id: number,
-    dto: {
-      av1?: number | string;
-      av2?: number | string;
-      av3?: number | string;
-      participacion?: number | string;
-      proyecto?: number | string;
-      final?: number | string;
-    }
-  ) {
-    const payload: any = {
-      avance1: dto.av1 === '' ? null : dto.av1 !== undefined ? Number(dto.av1) : undefined,
-      avance2: dto.av2 === '' ? null : dto.av2 !== undefined ? Number(dto.av2) : undefined,
-      avance3: dto.av3 === '' ? null : dto.av3 !== undefined ? Number(dto.av3) : undefined,
-      participacion:
-        dto.participacion === '' ? null : dto.participacion !== undefined ? Number(dto.participacion) : undefined,
-      proyecto_final:
-        dto.proyecto === '' ? null : dto.proyecto !== undefined ? Number(dto.proyecto) : undefined,
-      nota_final: dto.final === '' ? null : dto.final !== undefined ? Number(dto.final) : undefined,
-    };
-    Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-    return this.http.put<NotaRow>(`${this.base}/notas/${id}/`, payload);
-  }
-
-  eliminarNota(id: number) {
-    return this.http.delete<void>(`${this.base}/notas/${id}/`);
-  }
-
-  // ----------------- export -----------------
-  exportar(format: 'csv' | 'xlsx' | 'pdf', q: { curso?: string; seccion?: string; codigo?: string }) {
-    const path = format === 'csv' ? 'export/csv' : format === 'xlsx' ? 'export/xlsx' : 'export/pdf';
-    return this.http.get(`${this.base}/notas/${path}/`, {
-      params: this.toParams({ curso: q.curso, seccion: q.seccion, codigo: q.codigo }),
-      responseType: 'blob',
-    });
-  }
-
-  // ----------------- ML -----------------
-  mlProyeccion(payload: { curso?: string; seccion?: string; seccion_id?: number }) {
-    return this.http.post(`${this.base}/notas/ml/proyeccion/`, payload);
-  }
-  mlRiesgo(payload: { curso?: string; seccion?: string; seccion_id?: number }) {
-    return this.http.post(`${this.base}/notas/ml/riesgo/`, payload);
+    // endpoint: /api/auth/register/
+    return this.http.post<{ message: string; username: string }>(`${this.base}/auth/register/`, payload);
   }
 }
