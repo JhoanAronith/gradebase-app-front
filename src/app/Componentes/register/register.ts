@@ -45,8 +45,6 @@ export class Register {
       next: () => {
         this.loading = false;
         this.msg = 'Registro exitoso. Ya puedes iniciar sesión.';
-        // Si quieres redirigir después de unos segundos:
-        // setTimeout(() => this.router.navigateByUrl('/login'), 1200);
       },
       error: (e: any) => {
         this.loading = false;
