@@ -90,7 +90,7 @@ export class ApiService {
     return this.http.post<any>(`${this.base}/notas/`, payload);
   }
 
-  // Usar PATCH para actualización parcial (evita 400 por campos faltantes en PUT)
+  // Usar PATCH para actualización parcial
   actualizarNota(id: number, d: {
     seccionId?: number;
     estudianteId?: number;
@@ -116,7 +116,7 @@ export class ApiService {
     return this.http.get(`${this.base}/notas/${path}/`, { params, responseType: 'blob' });
   }
 
-  // Alias para compatibilidad con el componente (usa exportar)
+  // Alias para compatibilidad con el componente
   exportar(format: 'csv' | 'xlsx' | 'pdf', q: { curso?: string; seccion?: string; codigo?: string }) {
     return this.exportNotas(format, q);
   }

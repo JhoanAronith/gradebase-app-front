@@ -137,15 +137,13 @@ export class RegisterGrades implements OnInit {
   // ---------------------------
   // Acciones
   // ---------------------------
-  // Habilitamos si hay sección y (en creación) estudiante. Los valores pueden ser 0.
   tieneValores(): boolean {
-    // Si quieres exigir al menos un campo no-nulo, cambia esta función.
     return true;
   }
 
   editar(n: NotaRow) {
     this.editId = n.id;
-    this.estudianteId = n.estudiante_id; // ya está fija para edición
+    this.estudianteId = n.estudiante_id; 
     this.av1 = n.av1;
     this.av2 = n.av2;
     this.av3 = n.av3;
@@ -182,7 +180,7 @@ export class RegisterGrades implements OnInit {
 
     const dtoCreate = {
       seccionId: this.seccionId as number,
-      estudianteId: this.estudianteId as number, // obligatorio en creación
+      estudianteId: this.estudianteId as number,
       av1: dtoUpdate.av1,
       av2: dtoUpdate.av2,
       av3: dtoUpdate.av3,
@@ -203,8 +201,6 @@ export class RegisterGrades implements OnInit {
       next: () => {
         this.loading = false;
         this.refrescarTabla();
-        // si quieres limpiar el form tras crear/editar, descomenta:
-        // this.limpiar(false);
       },
       error: () => (this.loading = false),
     });

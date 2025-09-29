@@ -70,7 +70,6 @@
     </div>
 
     <div class="mt-3 d-flex gap-2">
-      <!-- Importante: en edición (editId definido) no exige estudiante -->
       <button type="submit" class="btn btn-primary"
               [disabled]="loading || !seccionId || (!editId && !estudianteId) || !tieneValores()">
         Guardar
