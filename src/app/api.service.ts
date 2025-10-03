@@ -1,144 +1,180 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { map } from 'rxjs/operators';
-import { API_CONFIG } from './api.config';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+
+export interface NotasFilter {
+  curso?: string; 
+  seccion?: string | number; 
+  codigo?: string;    
+  page?: number;
+  page_size?: number;
+  seccionId?: number;      
+}
+
+export interface CrearNotaInput {
+  seccionId: number;
+  estudianteId: number;
+  av1?: number | null;
+  av2?: number | null;
+  av3?: number | null;
+  participacion?: number | null;
+  proyecto?: number | null;
+  final?: number | null;
+}
+
+export interface ActualizarNotaInput {
+  seccionId?: number;
+  estudianteId?: number;
+  av1?: number | null;
+  av2?: number | null;
+  av3?: number | null;
+  participacion?: number | null;
+  proyecto?: number | null;
+  final?: number | null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private base = API_CONFIG.baseUrl;
+  // Ajusta esta base si tu API usa otra URL
+  readonly baseUrl = 'http://localhost:8000/api';
+  private readonly tokenKey = 'access_token';
 
   constructor(private http: HttpClient) {}
 
-  // ----------------- helpers -----------------
-  private toParams(obj: Record<string, string | number | boolean | undefined | null>) {
+  // ========== Auth helpers ==========
+  setToken(token: string) { localStorage.setItem(this.tokenKey, token); }
+  getToken(): string | null { return localStorage.getItem(this.tokenKey); }
+  private authHeaders(): { headers: HttpHeaders } {
+    const t = this.getToken();
+    const headers = t
+      ? new HttpHeaders({ Authorization: `Bearer ${t}` })
+      : new HttpHeaders();
+    return { headers };
+  }
+
+  // ========== Catálogos ==========
+  secciones(params?: { page_size?: number; page?: number }) {
+    let httpParams = new HttpParams();
+    if (params?.page_size) httpParams = httpParams.set('page_size', String(params.page_size));
+    if (params?.page) httpParams = httpParams.set('page', String(params.page));
+    return this.http.get(`${this.baseUrl}/secciones/`, {
+      params: httpParams,
+      ...this.authHeaders(),
+    });
+  }
+
+  estudiantes(seccionId: number, page_size = 1000) {
+    const params = new HttpParams()
+      .set('seccion', String(seccionId))
+      .set('page_size', String(page_size));
+    return this.http.get(`${this.baseUrl}/estudiantes/`, {
+      params,
+      ...this.authHeaders(),
+    });
+  }
+
+  estudiantesFiltro(params: any) {
     let p = new HttpParams();
-    Object.entries(obj).forEach(([k, v]) => {
+    Object.keys(params || {}).forEach((k) => {
+      const v = params[k];
       if (v !== undefined && v !== null && v !== '') p = p.set(k, String(v));
     });
-    return p;
-  }
-
-  private unwrapArray<T = any>() {
-    // DRF: puede venir {results: []} o []
-    return map((r: any) => (Array.isArray(r) ? (r as T[]) : (r?.results ?? [])));
-  }
-
-  // ----------------- catálogos -----------------
-  secciones(page_size = 1000) {
-    const params = this.toParams({ page_size });
-    return this.http.get<any[]>(`${this.base}/secciones/`, { params }).pipe(this.unwrapArray());
-  }
-
-  estudiantes(seccionId?: number, page_size = 1000) {
-    const params = this.toParams({ seccion: seccionId, page_size });
-    return this.http.get<any[]>(`${this.base}/estudiantes/`, { params }).pipe(this.unwrapArray());
-  }
-
-  // ----------------- notas (listado) -----------------
-  notas(q: { curso?: string; seccionId?: number; codigo?: string; page?: number; page_size?: number } = {}) {
-    const params = this.toParams({
-      seccion: q.seccionId,
-      'seccion__curso__codigo': q.curso,
-      'estudiante__codigo': q.codigo,
-      page: q.page,
-      page_size: q.page_size ?? 1000
+    return this.http.get(`${this.baseUrl}/estudiantes/`, {
+      params: p,
+      ...this.authHeaders(),
     });
-    return this.http.get<{ count: number; next: string | null; previous: string | null; results: any[] }>(
-      `${this.base}/notas/`, { params }
-    );
   }
 
-  // -------- mapeo DTO front -> payload backend --------
-  private mapNotaPayload(d: {
-    seccionId?: number;
-    estudianteId?: number;
-    av1?: number | null;
-    av2?: number | null;
-    av3?: number | null;
-    participacion?: number | null;
-    proyecto?: number | null;
-    final?: number | null;
-  }) {
-    const p: any = {};
-    const add = (k: string, v: any) => { if (v !== undefined && v !== null) p[k] = v; };
+  // ========== Reporte de notas ==========
+  notas(filters: NotasFilter) {
+    let params = new HttpParams();
 
-    if (d.seccionId !== undefined) p.seccion = d.seccionId;
-    if (d.estudianteId !== undefined) p.estudiante = d.estudianteId;
+    if (filters.curso) params = params.set('seccion__curso__codigo', filters.curso);
 
-    add('avance1', d.av1);
-    add('avance2', d.av2);
-    add('avance3', d.av3);
-    add('participacion', d.participacion);
-    add('proyecto_final', d.proyecto);
-    add('nota_final', d.final);
+    const sec = filters.seccion ?? filters.seccionId;
+    if (typeof sec === 'number') {
+      params = params.set('seccion', String(sec));
+    } else if (typeof sec === 'string' && sec.trim()) {
+      params = params.set('seccion__nombre', sec.trim());
+    }
 
-    return p;
+    if (filters.codigo) params = params.set('estudiante__codigo', filters.codigo);
+    if (filters.page) params = params.set('page', String(filters.page));
+    params = params.set('page_size', String(filters.page_size ?? 1000));
+
+    return this.http.get(`${this.baseUrl}/notas/`, {
+      params,
+      ...this.authHeaders(),
+    });
   }
 
-  // ----------------- notas CRUD -----------------
-  crearNota(d: {
-    seccionId: number;
-    estudianteId: number;
-    av1?: number | null;
-    av2?: number | null;
-    av3?: number | null;
-    participacion?: number | null;
-    proyecto?: number | null;
-    final?: number | null;
-  }) {
-    const payload = this.mapNotaPayload(d);
-    return this.http.post<any>(`${this.base}/notas/`, payload);
+  // Exportación (DEVUELVE Blob)
+  exportNotas(format: 'csv' | 'xlsx' | 'pdf', filters: NotasFilter) {
+    let query = new HttpParams();
+    if (filters.curso) query = query.set('seccion__curso__codigo', filters.curso);
+
+    const sec = filters.seccion ?? filters.seccionId;
+    if (typeof sec === 'number') {
+      query = query.set('seccion', String(sec));
+    } else if (typeof sec === 'string' && sec.trim()) {
+      query = query.set('seccion__nombre', sec.trim());
+    }
+
+    if (filters.codigo) query = query.set('estudiante__codigo', filters.codigo);
+    if (filters.page) query = query.set('page', String(filters.page));
+    query = query.set('page_size', String(filters.page_size ?? 1000));
+
+    return this.http.get(`${this.baseUrl}/notas/export/${format}/`, {
+      params: query,
+      responseType: 'blob',
+      ...this.authHeaders(),
+    });
   }
 
-  // Usar PATCH para actualización parcial
-  actualizarNota(id: number, d: {
-    seccionId?: number;
-    estudianteId?: number;
-    av1?: number | null;
-    av2?: number | null;
-    av3?: number | null;
-    participacion?: number | null;
-    proyecto?: number | null;
-    final?: number | null;
-  }) {
-    const payload = this.mapNotaPayload(d);
-    return this.http.patch<any>(`${this.base}/notas/${id}/`, payload);
+  // ========== CRUD de notas ==========
+  private mapNotaPayload(input: Partial<CrearNotaInput | ActualizarNotaInput>) {
+    const body: any = {};
+    if (input.seccionId !== undefined) body.seccion = input.seccionId;
+    if (input.estudianteId !== undefined) body.estudiante = input.estudianteId;
+    if (input.av1 !== undefined) body.avance1 = input.av1;
+    if (input.av2 !== undefined) body.avance2 = input.av2;
+    if (input.av3 !== undefined) body.avance3 = input.av3;
+    if (input.participacion !== undefined) body.participacion = input.participacion;
+    if (input.proyecto !== undefined) body.proyecto_final = input.proyecto;
+    if (input.final !== undefined) body.nota_final = input.final;
+    return body;
+  }
+
+  crearNota(input: CrearNotaInput) {
+    const body = this.mapNotaPayload(input);
+    return this.http.post(`${this.baseUrl}/notas/`, body, this.authHeaders());
+  }
+
+  actualizarNota(id: number, input: ActualizarNotaInput) {
+    const body = this.mapNotaPayload(input);
+    return this.http.put(`${this.baseUrl}/notas/${id}/`, body, this.authHeaders());
   }
 
   eliminarNota(id: number) {
-    return this.http.delete<void>(`${this.base}/notas/${id}/`);
+    return this.http.delete(`${this.baseUrl}/notas/${id}/`, this.authHeaders());
   }
 
-  // ----------------- exportaciones -----------------
-  exportNotas(format: 'csv' | 'xlsx' | 'pdf', q: { curso?: string; seccion?: string; codigo?: string }) {
-    const path = format === 'csv' ? 'export/csv' : format === 'xlsx' ? 'export/xlsx' : 'export/pdf';
-    const params = this.toParams({ curso: q.curso, seccion: q.seccion, codigo: q.codigo });
-    return this.http.get(`${this.base}/notas/${path}/`, { params, responseType: 'blob' });
+  // ========== ML ==========
+  mlProyeccion(payload: { curso?: string; seccion?: string }) {
+    return this.http.post(`${this.baseUrl}/notas/ml/proyeccion/`, payload, this.authHeaders());
   }
 
-  // Alias para compatibilidad con el componente
-  exportar(format: 'csv' | 'xlsx' | 'pdf', q: { curso?: string; seccion?: string; codigo?: string }) {
-    return this.exportNotas(format, q);
+  mlRiesgo(payload: { curso?: string; seccion?: string }) {
+    return this.http.post(`${this.baseUrl}/notas/ml/riesgo/`, payload, this.authHeaders());
   }
 
-  // ----------------- ML opcional -----------------
-  mlProyeccion(payload: { curso?: string; seccion?: string; seccion_id?: number }) {
-    return this.http.post<any>(`${this.base}/notas/ml/proyeccion/`, payload);
-  }
-
-  mlRiesgo(payload: { curso?: string; seccion?: string; seccion_id?: number }) {
-    return this.http.post<any>(`${this.base}/notas/ml/riesgo/`, payload);
-  }
-
-  // ----------------- registro de docente -----------------
-  registerDocente(payload: {
+  // ========== Registro de docente ==========
+  registerDocente(body: {
     username: string;
     password: string;
+    first_name?: string;
+    last_name?: string;
     email?: string;
-    nombre: string;
-    apellido: string;
   }) {
-    // endpoint: /api/auth/register/
-    return this.http.post<{ message: string; username: string }>(`${this.base}/auth/register/`, payload);
+    return this.http.post(`${this.baseUrl}/auth/register/`, body, this.authHeaders());
   }
 }

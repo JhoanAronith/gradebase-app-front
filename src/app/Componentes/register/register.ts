@@ -1,5 +1,4 @@
 import { Component } from '@angular/core';
-import { RouterLink, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
@@ -7,53 +6,44 @@ import { ApiService } from '../../api.service';
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './register.html',
-  styleUrls: ['./register.css']
 })
 export class Register {
   username = '';
+  password = '';
+  password2 = '';
   nombre = '';
   apellido = '';
   email = '';
-  password = '';
-  password2 = '';
+
   loading = false;
   msg = '';
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(private api: ApiService) {}
 
   submit() {
     this.msg = '';
-    if (!this.username || !this.nombre || !this.apellido || !this.password || !this.password2) {
-      this.msg = 'Completa los campos obligatorios.';
-      return;
-    }
     if (this.password !== this.password2) {
-      this.msg = 'Las contraseñas no coinciden.';
+      this.msg = 'Las contraseñas no coinciden';
       return;
     }
-
     this.loading = true;
     this.api.registerDocente({
-      username: this.username.trim(),
+      username: this.username,
       password: this.password,
-      email: this.email.trim() || undefined,
-      nombre: this.nombre.trim(),
-      apellido: this.apellido.trim(),
+      first_name: this.nombre,
+      last_name: this.apellido,
+      email: this.email,
     }).subscribe({
       next: () => {
+        this.msg = 'Usuario registrado correctamente';
         this.loading = false;
-        this.msg = 'Registro exitoso. Ya puedes iniciar sesión.';
       },
       error: (e: any) => {
+        this.msg = e?.error?.detail || 'No se pudo registrar';
         this.loading = false;
-        this.msg =
-          e?.error?.username?.[0] ||
-          e?.error?.password?.[0] ||
-          e?.error?.detail ||
-          'No se pudo registrar.';
-      }
+      },
     });
   }
 }
