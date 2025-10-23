@@ -1,16 +1,21 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../api.service';
+import { ApiService, NotaApi, ExportFormat } from '../../api.service';
 
 type NotaRow = {
+  id: number;
   codigo: string;
   alumno: string;
   curso: string;
   seccion: string;
-  av1: number; av2: number; av3: number;
-  part: number; proy: number; final: number;
-  raw: any;
+  av1: number;
+  av2: number;
+  av3: number;
+  part: number;
+  proy: number;
+  final: number;
+  raw: NotaApi;
 };
 
 @Component({
@@ -20,172 +25,129 @@ type NotaRow = {
   templateUrl: './grade-report.html',
 })
 export class GradeReport {
-  // filtros
+  // Filtros
   curso = '';
-  seccion = '';
+  seccionId: number | null = null;
+  seccionNombre = '';
   codigo = '';
+  page = 1;
 
-  // tabla
-  filas: NotaRow[] = [];
+  // Estado
   loading = false;
-
-  // salida ML
+  filas: NotaRow[] = [];
   mlMsg = '';
 
   constructor(private api: ApiService) {}
 
-  // ===== helpers =====
-  private fullNameFromAny(e: any): string {
-    if (!e) return '';
-    const last =
-      e.apellido ?? e.apellidos ?? e.last_name ?? e.usuario?.last_name ?? '';
-    const first =
-      e.nombre ?? e.nombres ?? e.first_name ?? e.usuario?.first_name ?? '';
-    const coma = last && first ? ', ' : '';
-    return `${last}${coma}${first}`.trim();
-  }
-
-  private mapNota(n: any): NotaRow {
-    const codigo =
-      n.estudiante?.codigo ??
-      n.estudiante_codigo ??
-      n.codigo ??
-      '';
-
-    const alumno =
-      this.fullNameFromAny(n.estudiante) ||
-      n.estudiante_nombre ||
-      '';
-
-    const curso =
-      n.seccion?.curso?.codigo ??
-      n.curso_codigo ??
-      this.curso ??
-      '';
-
-    const seccion =
-      n.seccion?.nombre ??
-      n.seccion ??
-      this.seccion ??
-      '';
+  private mapNota(n: NotaApi): NotaRow {
+    const codigo = n.estudiante_codigo ?? '';
+    const alumno = n.estudiante_nombre ?? '';
+    const curso = (n as any).curso || n.curso_codigo || '';
+    const seccion = (n as any).seccion || n.seccion_nombre || '';
 
     return {
+      id: n.id,
       codigo,
       alumno,
       curso,
       seccion,
-      av1: n.avance1 ?? n.av1 ?? 0,
-      av2: n.avance2 ?? n.av2 ?? 0,
-      av3: n.avance3 ?? n.av3 ?? 0,
-      part: n.participacion ?? n.part ?? 0,
-      proy: n.proyecto_final ?? n.proyecto ?? 0,
-      final: n.nota_final ?? n.final ?? 0,
+      av1: (n.av1 ?? n.avance1 ?? 0) as number,
+      av2: (n.av2 ?? n.avance2 ?? 0) as number,
+      av3: (n.av3 ?? n.avance3 ?? 0) as number,
+      part: (n.part ?? n.participacion ?? 0) as number,
+      proy: (n.proy ?? (n as any).proyecto ?? (n as any).proyecto_final ?? 0) as number,
+      final: (n.final ?? n.nota_final ?? 0) as number,
       raw: n,
     };
   }
 
-  private patchRowsWithStudents(students: any[]) {
-    if (!this.filas?.length || !students?.length) return;
-    const byId = new Map<number, any>();
-    const byCode = new Map<string, any>();
-    for (const s of students) {
-      byId.set(s.id, s);
-      if (s.codigo) byCode.set(String(s.codigo), s);
-    }
-
-    for (const r of this.filas) {
-      if (r.codigo && r.alumno) continue;
-
-      const estId =
-        r.raw?.estudiante?.id ??
-        r.raw?.estudiante ??
-        r.raw?.estudiante_id ??
-        null;
-
-      // completa por id primero
-      let est = (estId != null) ? byId.get(Number(estId)) : undefined;
-
-      // si no hay por id, intenta por código
-      if (!est && r.codigo) est = byCode.get(String(r.codigo));
-
-      if (est) {
-        r.codigo = r.codigo || est.codigo || '';
-        const last =
-          est.apellido ?? est.apellidos ?? est.last_name ?? est.usuario?.last_name ?? '';
-        const first =
-          est.nombre ?? est.nombres ?? est.first_name ?? est.usuario?.first_name ?? '';
-        const coma = last && first ? ', ' : '';
-        r.alumno = r.alumno || `${last}${coma}${first}`.trim();
-      }
-    }
-  }
-
-  // ===== acciones =====
-  buscar() {
+  buscar(): void {
     this.loading = true;
     this.filas = [];
-
     this.api
       .notas({
         curso: this.curso || undefined,
-        seccion: this.seccion || undefined,
+        seccion: this.seccionId != null ? this.seccionId : (this.seccionNombre || undefined),
         codigo: this.codigo || undefined,
+        page: this.page,
         page_size: 1000,
       })
       .subscribe({
         next: (res: any) => {
-          const arr = res?.results ?? res ?? [];
-          this.filas = arr.map((n: any) => this.mapNota(n));
-
-          if (
-            this.seccion &&
-            this.filas.some(f => !f.codigo || !f.alumno)
-          ) {
-            this.api
-              .estudiantesFiltro({ seccion_nombre: this.seccion, page_size: 1000 })
-              .subscribe({
-                next: (es: any) => {
-                  const list = es?.results ?? es ?? [];
-                  this.patchRowsWithStudents(list);
-                  this.loading = false;
-                },
-                error: () => (this.loading = false),
-              });
-          } else {
-            this.loading = false;
-          }
+          const list = Array.isArray(res) ? res : res?.results ?? [];
+          this.filas = list.map((n: NotaApi) => this.mapNota(n));
         },
-        error: () => (this.loading = false),
+        error: () => (this.filas = []),
+        complete: () => (this.loading = false),
+      });
+  }
+
+  exportar(format: ExportFormat): void {
+    if (this.loading) return;
+    this.loading = true;
+    this.api
+      .exportNotas(format, {
+        curso: this.curso || undefined,
+        seccion: this.seccionId != null ? this.seccionId : (this.seccionNombre || undefined),
+        codigo: this.codigo || undefined,
+      })
+      .subscribe({
+        next: (blob: Blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `notas.${format}`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        },
+        complete: () => (this.loading = false),
       });
   }
 
   get canRunML(): boolean {
-    return (this.filas?.length ?? 0) >= 3;
+    return true;
   }
 
-  runProyeccion() {
+  runProyeccion(): void {
+    this.loading = true;
     this.mlMsg = '';
-    this.api.mlProyeccion({
-      curso: this.curso || undefined,
-      seccion: this.seccion || undefined,
-    }).subscribe({
-      next: (r: any) => (this.mlMsg = this.fmtML(r)),
-      error: (e) => (this.mlMsg = e?.error?.detail ?? 'No se pudo ejecutar Proyección'),
-    });
+    this.api
+      .mlProyeccion({
+        seccionId: this.seccionId ?? undefined,
+        curso: this.curso || undefined,
+        seccion: this.seccionNombre || undefined,
+      })
+      .subscribe({
+        next: (res: any) => (this.mlMsg = this.fmtML(res)),
+        error: (e) => (this.mlMsg = e?.error?.detail ?? 'No se pudo ejecutar la proyección'),
+        complete: () => (this.loading = false),
+      });
   }
 
-  runRiesgo() {
+  runRiesgo(): void {
+    this.loading = true;
     this.mlMsg = '';
-    this.api.mlRiesgo({
-      curso: this.curso || undefined,
-      seccion: this.seccion || undefined,
-    }).subscribe({
-      next: (r: any) => (this.mlMsg = this.fmtML(r)),
-      error: (e) => (this.mlMsg = e?.error?.detail ?? 'No se pudo ejecutar Riesgo'),
-    });
+    this.api
+      .mlRiesgo({
+        seccionId: this.seccionId ?? undefined,
+        curso: this.curso || undefined,
+        seccion: this.seccionNombre || undefined,
+      })
+      .subscribe({
+        next: (res: any) => (this.mlMsg = this.fmtML(res)),
+        error: (e) => (this.mlMsg = e?.error?.detail ?? 'No se pudo ejecutar el riesgo'),
+        complete: () => (this.loading = false),
+      });
   }
 
-  private fmtML(obj: any): string {
-    try { return JSON.stringify(obj, null, 2); } catch { return String(obj ?? ''); }
+  private fmtML(res: any): string {
+    try {
+      if (!res) return 'Sin respuesta del modelo';
+      const m = res.model ? `modelo=${res.model.type}` : '';
+      const count = Array.isArray(res.predictions) ? res.predictions.length : 0;
+      return `OK ${m} | predicciones=${count}`;
+    } catch {
+      return 'Resultado ML recibido';
+    }
   }
 }

@@ -1,32 +1,39 @@
-<div class="container">
-  <h2>Notas</h2>
+<div class="container my-4">
+  <h2 class="mb-3">Reporte de Notas</h2>
 
-  <div class="row g-3 mb-3">
+  <div class="row g-3 align-items-end">
     <div class="col-md-3">
-      <label class="form-label">Curso</label>
-      <input class="form-control" [(ngModel)]="curso" placeholder="MS00" />
+      <label class="form-label">Curso (código)</label>
+      <input class="form-control" [(ngModel)]="curso" name="curso" placeholder="FS, IA, etc"/>
     </div>
     <div class="col-md-3">
-      <label class="form-label">Sección (A)</label>
-      <input class="form-control" [(ngModel)]="seccion" placeholder="A" />
+      <label class="form-label">Sección (nombre opcional)</label>
+      <input class="form-control" [(ngModel)]="seccionNombre" name="seccionNombre" placeholder="A, B, 2024-1"/>
     </div>
-    <div class="col-md-4">
-      <label class="form-label">Código estudiante (U12345678)</label>
-      <input class="form-control" [(ngModel)]="codigo" />
+    <div class="col-md-3">
+      <label class="form-label">Código estudiante</label>
+      <input class="form-control" [(ngModel)]="codigo" name="codigo" placeholder="U12345678"/>
     </div>
-    <div class="col-md-2 d-flex align-items-end">
+    <div class="col-md-3">
       <button class="btn btn-primary w-100" (click)="buscar()" [disabled]="loading">Filtrar</button>
     </div>
   </div>
 
-  <div class="mb-2">
-    <button class="btn btn-info me-2" (click)="runProyeccion()" [disabled]="!canRunML">ML: Proyección</button>
-    <button class="btn btn-warning" (click)="runRiesgo()" [disabled]="!canRunML">ML: Riesgo</button>
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-outline-secondary" (click)="exportar('csv')" [disabled]="loading">Exportar CSV</button>
+    <button class="btn btn-outline-secondary" (click)="exportar('xlsx')" [disabled]="loading">Exportar XLSX</button>
+    <button class="btn btn-outline-secondary" (click)="exportar('pdf')" [disabled]="loading">Exportar PDF</button>
   </div>
 
-  <div class="table-responsive">
+  <div class="mt-3">
+    <button class="btn btn-info me-2" (click)="runProyeccion()" [disabled]="!canRunML || loading">ML: Proyección</button>
+    <button class="btn btn-warning" (click)="runRiesgo()" [disabled]="!canRunML || loading">ML: Riesgo</button>
+    <div class="mt-2 text-muted">{{ mlMsg }}</div>
+  </div>
+
+  <div class="table-responsive mt-3" *ngIf="filas.length; else noRows">
     <table class="table table-bordered table-striped">
-      <thead>
+      <thead class="table-light">
         <tr>
           <th>Código</th>
           <th>Alumno</th>
@@ -35,7 +42,7 @@
           <th>Av1</th>
           <th>Av2</th>
           <th>Av3</th>
-          <th>Part</th>
+          <th>Part.</th>
           <th>Proyecto</th>
           <th>Final</th>
         </tr>
@@ -56,11 +63,7 @@
       </tbody>
     </table>
   </div>
-
-  <div class="card mt-3">
-    <div class="card-header">Resultado ML</div>
-    <div class="card-body">
-      <pre class="mb-0" style="white-space: pre-wrap">{{ mlMsg }}</pre>
-    </div>
-  </div>
+  <ng-template #noRows>
+    <div class="text-muted">Sin datos. Usa los filtros y presiona “Filtrar”.</div>
+  </ng-template>
 </div>

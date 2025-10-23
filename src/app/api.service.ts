@@ -1,180 +1,260 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { map, Observable } from 'rxjs';
+import { API_CONFIG } from './api.config';
+
+export interface CursoApi {
+  id: number;
+  codigo: string;
+  nombre?: string;
+}
+
+export interface SeccionApi {
+  id: number;
+  nombre: string;
+  curso: number | CursoApi;
+  curso_codigo?: string;
+}
+
+export interface EstudianteApi {
+  id: number;
+  codigo: string;
+  nombre?: string;
+  apellido?: string;
+  nombres?: string;
+  apellidos?: string;
+  email?: string;
+}
+
+export interface NotaApi {
+  id: number;
+  estudiante: number;
+  seccion: number;
+  avance1?: number | null;
+  avance2?: number | null;
+  avance3?: number | null;
+  participacion?: number | null;
+  proyecto_final?: number | null;
+  nota_final?: number | null;
+
+  estudiante_codigo?: string;
+  estudiante_nombre?: string;
+  seccion_nombre?: string;
+  curso_codigo?: string;
+
+  av1?: number | null;
+  av2?: number | null;
+  av3?: number | null;
+  part?: number | null;
+  proy?: number | null;
+  final?: number | null;
+}
+
+export interface Paged<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
 
 export interface NotasFilter {
-  curso?: string; 
-  seccion?: string | number; 
-  codigo?: string;    
+  curso?: string;                 // mapea a seccion__curso__codigo
+  seccion?: string | number;      // acepta id (número) o nombre de sección (string)
+  codigo?: string;                // estudiante__codigo
   page?: number;
   page_size?: number;
-  seccionId?: number;      
 }
 
-export interface CrearNotaInput {
-  seccionId: number;
-  estudianteId: number;
-  av1?: number | null;
-  av2?: number | null;
-  av3?: number | null;
-  participacion?: number | null;
-  proyecto?: number | null;
-  final?: number | null;
-}
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
 
-export interface ActualizarNotaInput {
-  seccionId?: number;
-  estudianteId?: number;
-  av1?: number | null;
-  av2?: number | null;
-  av3?: number | null;
-  participacion?: number | null;
-  proyecto?: number | null;
-  final?: number | null;
-}
-
+//Declaracion de servicio
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  // Ajusta esta base si tu API usa otra URL
-  readonly baseUrl = 'http://localhost:8000/api';
-  private readonly tokenKey = 'access_token';
+  private baseUrl = API_CONFIG.baseUrl;
 
   constructor(private http: HttpClient) {}
 
-  // ========== Auth helpers ==========
-  setToken(token: string) { localStorage.setItem(this.tokenKey, token); }
-  getToken(): string | null { return localStorage.getItem(this.tokenKey); }
-  private authHeaders(): { headers: HttpHeaders } {
-    const t = this.getToken();
-    const headers = t
-      ? new HttpHeaders({ Authorization: `Bearer ${t}` })
-      : new HttpHeaders();
-    return { headers };
+  // ============== Helpers ==============
+  private getToken(): string | null {
+    return (
+      localStorage.getItem('access') ||
+      localStorage.getItem('token') ||
+      null
+    );
   }
 
-  // ========== Catálogos ==========
-  secciones(params?: { page_size?: number; page?: number }) {
-    let httpParams = new HttpParams();
-    if (params?.page_size) httpParams = httpParams.set('page_size', String(params.page_size));
-    if (params?.page) httpParams = httpParams.set('page', String(params.page));
-    return this.http.get(`${this.baseUrl}/secciones/`, {
-      params: httpParams,
-      ...this.authHeaders(),
-    });
+  private authHeaders(): HttpHeaders {
+    const token = this.getToken();
+    let h = new HttpHeaders();
+    if (token) h = h.set('Authorization', `Bearer ${token}`);
+    return h;
   }
 
-  estudiantes(seccionId: number, page_size = 1000) {
-    const params = new HttpParams()
-      .set('seccion', String(seccionId))
-      .set('page_size', String(page_size));
-    return this.http.get(`${this.baseUrl}/estudiantes/`, {
-      params,
-      ...this.authHeaders(),
-    });
-  }
-
-  estudiantesFiltro(params: any) {
+  private toParams(obj: Record<string, any>): HttpParams {
     let p = new HttpParams();
-    Object.keys(params || {}).forEach((k) => {
-      const v = params[k];
-      if (v !== undefined && v !== null && v !== '') p = p.set(k, String(v));
+    Object.entries(obj).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        p = p.set(k, String(v));
+      }
     });
-    return this.http.get(`${this.baseUrl}/estudiantes/`, {
-      params: p,
-      ...this.authHeaders(),
-    });
+    return p;
   }
 
-  // ========== Reporte de notas ==========
-  notas(filters: NotasFilter) {
-    let params = new HttpParams();
+  private unwrapList<T>() {
+    return map((r: any) => (Array.isArray(r) ? (r as T[]) : (r?.results ?? [])));
+  }
 
-    if (filters.curso) params = params.set('seccion__curso__codigo', filters.curso);
+  // ============== Catálogos ==============
 
-    const sec = filters.seccion ?? filters.seccionId;
-    if (typeof sec === 'number') {
-      params = params.set('seccion', String(sec));
-    } else if (typeof sec === 'string' && sec.trim()) {
-      params = params.set('seccion__nombre', sec.trim());
+  cursos(page_size = 1000): Observable<CursoApi[]> {
+    const params = this.toParams({ page_size });
+    return this.http
+      .get<any>(`${this.baseUrl}/cursos/`, { params, headers: this.authHeaders() })
+      .pipe(this.unwrapList<CursoApi>());
+  }
+
+  secciones(opts: { page_size?: number; page?: number } = {}): Observable<SeccionApi[]> {
+    const params = this.toParams({ page_size: opts.page_size ?? 1000, page: opts.page });
+    return this.http
+      .get<any>(`${this.baseUrl}/secciones/`, { params, headers: this.authHeaders() })
+      .pipe(this.unwrapList<SeccionApi>());
+  }
+
+  estudiantes(seccionId?: number, page_size = 1000): Observable<EstudianteApi[]> {
+    const params = this.toParams({ seccion: seccionId, page_size });
+    return this.http
+      .get<any>(`${this.baseUrl}/estudiantes/`, { params, headers: this.authHeaders() })
+      .pipe(this.unwrapList<EstudianteApi>());
+  }
+
+  // ============== Notas ==============
+
+  notas(filter: NotasFilter = {}): Observable<Paged<NotaApi>> {
+    const paramsObj: Record<string, any> = {
+      page: filter.page,
+      page_size: filter.page_size,
+      'seccion__curso__codigo': filter.curso,
+      'estudiante__codigo': filter.codigo,
+    };
+
+    if (filter.seccion !== undefined && filter.seccion !== null && filter.seccion !== '') {
+      if (typeof filter.seccion === 'number') {
+        paramsObj['seccion'] = filter.seccion; // filtra por id
+      } else {
+        paramsObj['seccion__nombre'] = filter.seccion; // filtra por nombre
+      }
     }
 
-    if (filters.codigo) params = params.set('estudiante__codigo', filters.codigo);
-    if (filters.page) params = params.set('page', String(filters.page));
-    params = params.set('page_size', String(filters.page_size ?? 1000));
-
-    return this.http.get(`${this.baseUrl}/notas/`, {
+    const params = this.toParams(paramsObj);
+    return this.http.get<Paged<NotaApi>>(`${this.baseUrl}/notas/`, {
       params,
-      ...this.authHeaders(),
+      headers: this.authHeaders(),
     });
   }
 
-  // Exportación (DEVUELVE Blob)
-  exportNotas(format: 'csv' | 'xlsx' | 'pdf', filters: NotasFilter) {
-    let query = new HttpParams();
-    if (filters.curso) query = query.set('seccion__curso__codigo', filters.curso);
+  crearNota(dto: {
+    seccion: number;
+    estudiante: number;
+    avance1?: number | null;
+    avance2?: number | null;
+    avance3?: number | null;
+    participacion?: number | null;
+    proyecto_final?: number | null;
+    nota_final?: number | null;
+  }): Observable<NotaApi> {
+    return this.http.post<NotaApi>(`${this.baseUrl}/notas/`, dto, {
+      headers: this.authHeaders(),
+    });
+  }
 
-    const sec = filters.seccion ?? filters.seccionId;
-    if (typeof sec === 'number') {
-      query = query.set('seccion', String(sec));
-    } else if (typeof sec === 'string' && sec.trim()) {
-      query = query.set('seccion__nombre', sec.trim());
+  actualizarNota(
+    id: number,
+    dto: {
+      seccion: number;
+      estudiante: number;
+      avance1?: number | null;
+      avance2?: number | null;
+      avance3?: number | null;
+      participacion?: number | null;
+      proyecto_final?: number | null;
+      nota_final?: number | null;
+    }
+  ): Observable<NotaApi> {
+    return this.http.put<NotaApi>(`${this.baseUrl}/notas/${id}/`, dto, {
+      headers: this.authHeaders(),
+    });
+  }
+
+  eliminarNota(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/notas/${id}/`, {
+      headers: this.authHeaders(),
+    });
+  }
+
+  // ============== Exportaciones ==============
+
+  exportNotas(format: ExportFormat, q: { curso?: string; seccion?: string | number; codigo?: string }): Observable<Blob> {
+    const path = format === 'csv' ? 'export/csv' : format === 'xlsx' ? 'export/xlsx' : 'export/pdf';
+
+    const paramsObj: Record<string, any> = {
+      'seccion__curso__codigo': q.curso,
+      'estudiante__codigo': q.codigo,
+    };
+    if (q.seccion !== undefined && q.seccion !== null && q.seccion !== '') {
+      if (typeof q.seccion === 'number') {
+        paramsObj['seccion'] = q.seccion;
+      } else {
+        paramsObj['seccion__nombre'] = q.seccion;
+      }
     }
 
-    if (filters.codigo) query = query.set('estudiante__codigo', filters.codigo);
-    if (filters.page) query = query.set('page', String(filters.page));
-    query = query.set('page_size', String(filters.page_size ?? 1000));
+    const params = this.toParams(paramsObj);
 
-    return this.http.get(`${this.baseUrl}/notas/export/${format}/`, {
-      params: query,
+    return this.http.get(`${this.baseUrl}/notas/${path}/`, {
+      params,
+      headers: this.authHeaders(),
       responseType: 'blob',
-      ...this.authHeaders(),
     });
   }
 
-  // ========== CRUD de notas ==========
-  private mapNotaPayload(input: Partial<CrearNotaInput | ActualizarNotaInput>) {
-    const body: any = {};
-    if (input.seccionId !== undefined) body.seccion = input.seccionId;
-    if (input.estudianteId !== undefined) body.estudiante = input.estudianteId;
-    if (input.av1 !== undefined) body.avance1 = input.av1;
-    if (input.av2 !== undefined) body.avance2 = input.av2;
-    if (input.av3 !== undefined) body.avance3 = input.av3;
-    if (input.participacion !== undefined) body.participacion = input.participacion;
-    if (input.proyecto !== undefined) body.proyecto_final = input.proyecto;
-    if (input.final !== undefined) body.nota_final = input.final;
-    return body;
+  // ============== ML ==============
+  mlProyeccion(payload: { seccionId?: number; curso?: string; seccion?: string }) {
+    const body =
+      payload.seccionId != null
+        ? { seccion_id: payload.seccionId }
+        : { curso: payload.curso, seccion: payload.seccion };
+    return this.http.post(`${this.baseUrl}/notas/ml/proyeccion/`, body, {
+      headers: this.authHeaders(),
+    });
   }
 
-  crearNota(input: CrearNotaInput) {
-    const body = this.mapNotaPayload(input);
-    return this.http.post(`${this.baseUrl}/notas/`, body, this.authHeaders());
+  mlRiesgo(payload: { seccionId?: number; curso?: string; seccion?: string }) {
+    const body =
+      payload.seccionId != null
+        ? { seccion_id: payload.seccionId }
+        : { curso: payload.curso, seccion: payload.seccion };
+    return this.http.post(`${this.baseUrl}/notas/ml/riesgo/`, body, {
+      headers: this.authHeaders(),
+    });
   }
 
-  actualizarNota(id: number, input: ActualizarNotaInput) {
-    const body = this.mapNotaPayload(input);
-    return this.http.put(`${this.baseUrl}/notas/${id}/`, body, this.authHeaders());
-  }
-
-  eliminarNota(id: number) {
-    return this.http.delete(`${this.baseUrl}/notas/${id}/`, this.authHeaders());
-  }
-
-  // ========== ML ==========
-  mlProyeccion(payload: { curso?: string; seccion?: string }) {
-    return this.http.post(`${this.baseUrl}/notas/ml/proyeccion/`, payload, this.authHeaders());
-  }
-
-  mlRiesgo(payload: { curso?: string; seccion?: string }) {
-    return this.http.post(`${this.baseUrl}/notas/ml/riesgo/`, payload, this.authHeaders());
-  }
-
-  // ========== Registro de docente ==========
-  registerDocente(body: {
+  
+  registerDocente(data: {
     username: string;
     password: string;
+    email: string;
     first_name?: string;
     last_name?: string;
-    email?: string;
+    nombres?: string;
+    apellidos?: string;
   }) {
-    return this.http.post(`${this.baseUrl}/auth/register/`, body, this.authHeaders());
+    const payload = {
+      username: data.username,
+      password: data.password,
+      email: data.email,
+      first_name: data.first_name ?? data.nombres ?? '',
+      last_name: data.last_name ?? data.apellidos ?? '',
+    };
+    return this.http.post(`${this.baseUrl}/auth/register/`, payload);
   }
 }
