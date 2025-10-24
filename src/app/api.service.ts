@@ -58,16 +58,15 @@ export interface Paged<T> {
 }
 
 export interface NotasFilter {
-  curso?: string;                 // mapea a seccion__curso__codigo
+  curso?: string;                 // mapea a seccion__curso__codigo (para listar)
   seccion?: string | number;      // acepta id (número) o nombre de sección (string)
-  codigo?: string;                // estudiante__codigo
+  codigo?: string;                // estudiante__codigo (para listar)
   page?: number;
   page_size?: number;
 }
 
 export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
 
-//Declaracion de servicio
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private baseUrl = API_CONFIG.baseUrl;
@@ -139,7 +138,7 @@ export class ApiService {
 
     if (filter.seccion !== undefined && filter.seccion !== null && filter.seccion !== '') {
       if (typeof filter.seccion === 'number') {
-        paramsObj['seccion'] = filter.seccion; // filtra por id
+        paramsObj['seccion'] = filter.seccion; // filtra por id (válido para listar)
       } else {
         paramsObj['seccion__nombre'] = filter.seccion; // filtra por nombre
       }
@@ -192,23 +191,19 @@ export class ApiService {
   }
 
   // ============== Exportaciones ==============
-
-  exportNotas(format: ExportFormat, q: { curso?: string; seccion?: string | number; codigo?: string }): Observable<Blob> {
+  /**
+   * IMPORTANTE:
+   *  - Backend espera params: curso, seccion (NOMBRE), codigo
+   *  - No enviar IDs ni nombres con claves de filtro DRF aquí.
+   */
+  exportNotas(format: ExportFormat, q: { curso?: string; seccion?: string; codigo?: string }): Observable<Blob> {
     const path = format === 'csv' ? 'export/csv' : format === 'xlsx' ? 'export/xlsx' : 'export/pdf';
 
-    const paramsObj: Record<string, any> = {
-      'seccion__curso__codigo': q.curso,
-      'estudiante__codigo': q.codigo,
-    };
-    if (q.seccion !== undefined && q.seccion !== null && q.seccion !== '') {
-      if (typeof q.seccion === 'number') {
-        paramsObj['seccion'] = q.seccion;
-      } else {
-        paramsObj['seccion__nombre'] = q.seccion;
-      }
-    }
-
-    const params = this.toParams(paramsObj);
+    const params = this.toParams({
+      curso: q.curso,    // seccion__curso__codigo en backend
+      seccion: q.seccion, // nombre de la sección (p.ej. "22" o "A")
+      codigo: q.codigo,  // estudiante__codigo
+    });
 
     return this.http.get(`${this.baseUrl}/notas/${path}/`, {
       params,
@@ -238,7 +233,6 @@ export class ApiService {
     });
   }
 
-  
   registerDocente(data: {
     username: string;
     password: string;

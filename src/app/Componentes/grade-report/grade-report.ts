@@ -15,7 +15,7 @@ type NotaRow = {
   part: number;
   proy: number;
   final: number;
-  raw: NotaApi;   // conserva el objeto original (incluye seccion: id)
+  raw: NotaApi;
 };
 
 type MlProjItem = { codigo: string; estudiante: number; pred_final: number };
@@ -28,27 +28,23 @@ type MlRiskItem = { codigo: string; estudiante: number; risk_prob: number; clase
   templateUrl: './grade-report.html',
 })
 export class GradeReport {
-  // Filtros
   curso = '';
-  seccionId: number | null = null;   // <- se usará para ML
-  seccionNombre = '';                // opcional si no hay id
+  seccionId: number | null = null;
+  seccionNombre = '';
   codigo = '';
   page = 1;
 
-  // Estado
   loading = false;
   filas: NotaRow[] = [];
   mlMsg = '';
 
-  // ML: respuestas y mapas por código
   mlProj: { predictions: MlProjItem[] } | null = null;
   mlRisk: { predictions: MlRiskItem[] } | null = null;
-  predMap = new Map<string, number>();                 // codigo => pred_final
-  riskMap = new Map<string, { p: number; clase: string; umbral: number }>(); // codigo => datos
+  predMap = new Map<string, number>();
+  riskMap = new Map<string, { p: number; clase: string; umbral: number }>();
 
   constructor(private api: ApiService) {}
 
-  // Normaliza una fila
   private mapNota(n: NotaApi): NotaRow {
     const codigo = n.estudiante_codigo ?? '';
     const alumno = n.estudiante_nombre ?? '';
@@ -79,7 +75,6 @@ export class GradeReport {
     this.riskMap.clear();
   }
 
-  // Busca notas y DERIVA seccionId de la 1ª fila
   buscar(): void {
     this.loading = true;
     this.filas = [];
@@ -97,8 +92,6 @@ export class GradeReport {
         next: (res: any) => {
           const list = Array.isArray(res) ? res : (res?.results ?? []);
           this.filas = list.map((n: NotaApi) => this.mapNota(n));
-
-          // 🔹 Deriva seccionId automáticamente de la 1ª fila (si existe)
           if (this.filas.length) {
             const first = this.filas[0].raw;
             this.seccionId = typeof first?.seccion === 'number' ? first.seccion : this.seccionId;
@@ -119,10 +112,15 @@ export class GradeReport {
   exportar(format: ExportFormat): void {
     if (this.loading) return;
     this.loading = true;
+
+    const seccionNombre =
+      this.seccionNombre ||
+      (this.filas.length ? this.filas[0].seccion : undefined);
+
     this.api
       .exportNotas(format, {
         curso: this.curso || undefined,
-        seccion: this.seccionId != null ? this.seccionId : (this.seccionNombre || undefined),
+        seccion: seccionNombre,          // nombre, no ID
         codigo: this.codigo || undefined,
       })
       .subscribe({
@@ -134,12 +132,14 @@ export class GradeReport {
           a.click();
           window.URL.revokeObjectURL(url);
         },
-        error: (e) => console.error(e),
+        error: (e) => {
+          console.error('Error exportando:', e);
+          alert('No se pudo exportar. Revisa los filtros o tus permisos.');
+        },
         complete: () => (this.loading = false),
       });
   }
 
-  // Se puede ejecutar ML si tenemos seccionId o (curso y seccion por nombre)
   get canRunML(): boolean {
     return Boolean(
       (this.seccionId != null && !Number.isNaN(this.seccionId)) ||
@@ -205,32 +205,26 @@ export class GradeReport {
       });
   }
 
-  // Helpers de UI
   getPred(codigo: string): number | null {
     return this.predMap.has(codigo) ? (this.predMap.get(codigo) as number) : null;
   }
-
   getRisk(codigo: string): { p: number; clase: string; umbral: number } | null {
     return this.riskMap.has(codigo) ? (this.riskMap.get(codigo) as any) : null;
   }
-
   badgeClass(clase?: string): string {
     if (clase === 'ALTO') return 'badge bg-danger';
     if (clase === 'MEDIO') return 'badge bg-warning text-dark';
     if (clase === 'BAJO') return 'badge bg-success';
     return 'badge bg-secondary';
-    }
-
+  }
   toPct(x: number) { return (x * 100).toFixed(1) + '%'; }
 
-  // Mensaje compacto con métricas clave
   private fmtML(res: any): string {
     try {
       if (!res) return 'Sin respuesta del modelo';
       const m = res.model || {};
       const type = m.type || 'modelo';
       const count = Array.isArray(res.predictions) ? res.predictions.length : 0;
-
       const parts: string[] = [`${type}`, `preds=${count}`];
       if (m.r2 != null) parts.push(`R2=${Number(m.r2).toFixed(3)}`);
       if (m.mae != null) parts.push(`MAE=${Number(m.mae).toFixed(3)}`);
@@ -238,7 +232,6 @@ export class GradeReport {
       if (m.accuracy != null) parts.push(`ACC=${Number(m.accuracy).toFixed(3)}`);
       if (m.n_train != null) parts.push(`n=${m.n_train}`);
       if (m.version) parts.push(`v=${m.version}`);
-
       return `OK ${parts.join(' | ')}`;
     } catch {
       return 'Resultado ML recibido';
