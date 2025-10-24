@@ -15,8 +15,11 @@ type NotaRow = {
   part: number;
   proy: number;
   final: number;
-  raw: NotaApi;
+  raw: NotaApi;   // conserva el objeto original (incluye seccion: id)
 };
+
+type MlProjItem = { codigo: string; estudiante: number; pred_final: number };
+type MlRiskItem = { codigo: string; estudiante: number; risk_prob: number; clase: 'BAJO' | 'MEDIO' | 'ALTO'; umbral: number };
 
 @Component({
   selector: 'app-grade-report',
@@ -27,8 +30,8 @@ type NotaRow = {
 export class GradeReport {
   // Filtros
   curso = '';
-  seccionId: number | null = null;
-  seccionNombre = '';
+  seccionId: number | null = null;   // <- se usará para ML
+  seccionNombre = '';                // opcional si no hay id
   codigo = '';
   page = 1;
 
@@ -37,8 +40,15 @@ export class GradeReport {
   filas: NotaRow[] = [];
   mlMsg = '';
 
+  // ML: respuestas y mapas por código
+  mlProj: { predictions: MlProjItem[] } | null = null;
+  mlRisk: { predictions: MlRiskItem[] } | null = null;
+  predMap = new Map<string, number>();                 // codigo => pred_final
+  riskMap = new Map<string, { p: number; clase: string; umbral: number }>(); // codigo => datos
+
   constructor(private api: ApiService) {}
 
+  // Normaliza una fila
   private mapNota(n: NotaApi): NotaRow {
     const codigo = n.estudiante_codigo ?? '';
     const alumno = n.estudiante_nombre ?? '';
@@ -61,9 +71,20 @@ export class GradeReport {
     };
   }
 
+  private resetMl(): void {
+    this.mlMsg = '';
+    this.mlProj = null;
+    this.mlRisk = null;
+    this.predMap.clear();
+    this.riskMap.clear();
+  }
+
+  // Busca notas y DERIVA seccionId de la 1ª fila
   buscar(): void {
     this.loading = true;
     this.filas = [];
+    this.resetMl();
+
     this.api
       .notas({
         curso: this.curso || undefined,
@@ -74,10 +95,23 @@ export class GradeReport {
       })
       .subscribe({
         next: (res: any) => {
-          const list = Array.isArray(res) ? res : res?.results ?? [];
+          const list = Array.isArray(res) ? res : (res?.results ?? []);
           this.filas = list.map((n: NotaApi) => this.mapNota(n));
+
+          // 🔹 Deriva seccionId automáticamente de la 1ª fila (si existe)
+          if (this.filas.length) {
+            const first = this.filas[0].raw;
+            this.seccionId = typeof first?.seccion === 'number' ? first.seccion : this.seccionId;
+            this.seccionNombre = this.seccionNombre || (this.filas[0].seccion ?? '');
+          } else {
+            this.seccionId = null;
+          }
         },
-        error: () => (this.filas = []),
+        error: (e) => {
+          console.error(e);
+          this.filas = [];
+          this.seccionId = null;
+        },
         complete: () => (this.loading = false),
       });
   }
@@ -100,15 +134,24 @@ export class GradeReport {
           a.click();
           window.URL.revokeObjectURL(url);
         },
+        error: (e) => console.error(e),
         complete: () => (this.loading = false),
       });
   }
 
+  // Se puede ejecutar ML si tenemos seccionId o (curso y seccion por nombre)
   get canRunML(): boolean {
-    return true;
+    return Boolean(
+      (this.seccionId != null && !Number.isNaN(this.seccionId)) ||
+      (this.curso && this.seccionNombre)
+    );
   }
 
   runProyeccion(): void {
+    if (!this.canRunML) {
+      this.mlMsg = `Falta 'seccion_id' o ('curso' y 'seccion'). Usa Filtrar primero.`;
+      return;
+    }
     this.loading = true;
     this.mlMsg = '';
     this.api
@@ -118,13 +161,26 @@ export class GradeReport {
         seccion: this.seccionNombre || undefined,
       })
       .subscribe({
-        next: (res: any) => (this.mlMsg = this.fmtML(res)),
+        next: (res: any) => {
+          this.mlMsg = this.fmtML(res);
+          this.mlProj = res;
+          this.predMap.clear();
+          if (Array.isArray(res?.predictions)) {
+            for (const r of res.predictions as MlProjItem[]) {
+              this.predMap.set(r.codigo, r.pred_final);
+            }
+          }
+        },
         error: (e) => (this.mlMsg = e?.error?.detail ?? 'No se pudo ejecutar la proyección'),
         complete: () => (this.loading = false),
       });
   }
 
   runRiesgo(): void {
+    if (!this.canRunML) {
+      this.mlMsg = `Falta 'seccion_id' o ('curso' y 'seccion'). Usa Filtrar primero.`;
+      return;
+    }
     this.loading = true;
     this.mlMsg = '';
     this.api
@@ -134,18 +190,56 @@ export class GradeReport {
         seccion: this.seccionNombre || undefined,
       })
       .subscribe({
-        next: (res: any) => (this.mlMsg = this.fmtML(res)),
+        next: (res: any) => {
+          this.mlMsg = this.fmtML(res);
+          this.mlRisk = res;
+          this.riskMap.clear();
+          if (Array.isArray(res?.predictions)) {
+            for (const x of res.predictions as MlRiskItem[]) {
+              this.riskMap.set(x.codigo, { p: x.risk_prob, clase: x.clase, umbral: x.umbral });
+            }
+          }
+        },
         error: (e) => (this.mlMsg = e?.error?.detail ?? 'No se pudo ejecutar el riesgo'),
         complete: () => (this.loading = false),
       });
   }
 
+  // Helpers de UI
+  getPred(codigo: string): number | null {
+    return this.predMap.has(codigo) ? (this.predMap.get(codigo) as number) : null;
+  }
+
+  getRisk(codigo: string): { p: number; clase: string; umbral: number } | null {
+    return this.riskMap.has(codigo) ? (this.riskMap.get(codigo) as any) : null;
+  }
+
+  badgeClass(clase?: string): string {
+    if (clase === 'ALTO') return 'badge bg-danger';
+    if (clase === 'MEDIO') return 'badge bg-warning text-dark';
+    if (clase === 'BAJO') return 'badge bg-success';
+    return 'badge bg-secondary';
+    }
+
+  toPct(x: number) { return (x * 100).toFixed(1) + '%'; }
+
+  // Mensaje compacto con métricas clave
   private fmtML(res: any): string {
     try {
       if (!res) return 'Sin respuesta del modelo';
-      const m = res.model ? `modelo=${res.model.type}` : '';
+      const m = res.model || {};
+      const type = m.type || 'modelo';
       const count = Array.isArray(res.predictions) ? res.predictions.length : 0;
-      return `OK ${m} | predicciones=${count}`;
+
+      const parts: string[] = [`${type}`, `preds=${count}`];
+      if (m.r2 != null) parts.push(`R2=${Number(m.r2).toFixed(3)}`);
+      if (m.mae != null) parts.push(`MAE=${Number(m.mae).toFixed(3)}`);
+      if (m.rmse != null) parts.push(`RMSE=${Number(m.rmse).toFixed(3)}`);
+      if (m.accuracy != null) parts.push(`ACC=${Number(m.accuracy).toFixed(3)}`);
+      if (m.n_train != null) parts.push(`n=${m.n_train}`);
+      if (m.version) parts.push(`v=${m.version}`);
+
+      return `OK ${parts.join(' | ')}`;
     } catch {
       return 'Resultado ML recibido';
     }

@@ -4,19 +4,24 @@
   <div class="row g-3 align-items-end">
     <div class="col-md-3">
       <label class="form-label">Curso (código)</label>
-      <input class="form-control" [(ngModel)]="curso" name="curso" placeholder="FS, IA, etc"/>
+      <input class="form-control" [(ngModel)]="curso" name="curso" placeholder="MS00, IA, FS" />
     </div>
     <div class="col-md-3">
-      <label class="form-label">Sección (nombre opcional)</label>
-      <input class="form-control" [(ngModel)]="seccionNombre" name="seccionNombre" placeholder="A, B, 2024-1"/>
+      <label class="form-label">Sección (nombre)</label>
+      <input class="form-control" [(ngModel)]="seccionNombre" name="seccionNombre" placeholder="A, B, 22, 2024-1" />
+      <small class="text-muted">Si no tienes ID de sección, usa el nombre</small>
     </div>
     <div class="col-md-3">
       <label class="form-label">Código estudiante</label>
-      <input class="form-control" [(ngModel)]="codigo" name="codigo" placeholder="U12345678"/>
+      <input class="form-control" [(ngModel)]="codigo" name="codigo" placeholder="U12345678" />
     </div>
     <div class="col-md-3">
       <button class="btn btn-primary w-100" (click)="buscar()" [disabled]="loading">Filtrar</button>
     </div>
+  </div>
+
+  <div class="mt-2 text-muted" *ngIf="seccionId">
+    <small>seccion_id detectado: <strong>{{ seccionId }}</strong></small>
   </div>
 
   <div class="mt-3 d-flex gap-2">
@@ -28,7 +33,12 @@
   <div class="mt-3">
     <button class="btn btn-info me-2" (click)="runProyeccion()" [disabled]="!canRunML || loading">ML: Proyección</button>
     <button class="btn btn-warning" (click)="runRiesgo()" [disabled]="!canRunML || loading">ML: Riesgo</button>
-    <div class="mt-2 text-muted">{{ mlMsg }}</div>
+    <div class="mt-2" [class.text-muted]="mlMsg.startsWith('OK')" [class.text-danger]="!mlMsg.startsWith('OK')">
+      {{ mlMsg }}
+    </div>
+    <small *ngIf="!canRunML" class="text-muted d-block mt-1">
+      Requiere <code>seccion_id</code> (usa Filtrar) o ingresar <code>curso</code> y <code>seccion</code>.
+    </small>
   </div>
 
   <div class="table-responsive mt-3" *ngIf="filas.length; else noRows">
@@ -45,6 +55,10 @@
           <th>Part.</th>
           <th>Proyecto</th>
           <th>Final</th>
+
+          <!-- Nuevas columnas cuando haya resultados ML -->
+          <th *ngIf="mlProj">Proyección ML</th>
+          <th *ngIf="mlRisk">Riesgo ML</th>
         </tr>
       </thead>
       <tbody>
@@ -59,6 +73,23 @@
           <td>{{ n.part }}</td>
           <td>{{ n.proy }}</td>
           <td>{{ n.final }}</td>
+
+          <!-- Proyección ML por código -->
+          <td *ngIf="mlProj">
+            <ng-container *ngIf="getPred(n.codigo) as pred; else noPred">
+              {{ pred | number:'1.0-2' }}
+            </ng-container>
+            <ng-template #noPred>—</ng-template>
+          </td>
+
+          <!-- Riesgo ML por código con badge -->
+          <td *ngIf="mlRisk">
+            <ng-container *ngIf="getRisk(n.codigo) as r; else noRisk">
+              <span [ngClass]="badgeClass(r.clase)">{{ r.clase }}</span>
+              <small class="text-muted d-block">{{ (r.p * 100) | number:'1.0-1' }}%</small>
+            </ng-container>
+            <ng-template #noRisk>—</ng-template>
+          </td>
         </tr>
       </tbody>
     </table>
