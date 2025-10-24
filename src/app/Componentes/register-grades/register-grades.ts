@@ -94,12 +94,26 @@ export class RegisterGrades implements OnInit {
   }
 
   editar(n: NotaApi): void {
+    // 👉 aseguramos que el botón Guardar se habilite
     this.editId = n.id;
+
+    // setear el estudiante/ sección de la fila seleccionada
+    if (typeof n.estudiante === 'number') {
+      this.estudianteId = n.estudiante;
+    }
+    if (typeof n.seccion === 'number') {
+      // por consistencia; si cambias de sección, se recargan alumnos/notas
+      if (this.seccionId !== n.seccion) {
+        this.seccionId = n.seccion;
+        this.onSeccionChange();
+      }
+    }
+
+    // llenar campos
     this.av1 = (n.av1 ?? n.avance1 ?? null) as number | null;
     this.av2 = (n.av2 ?? n.avance2 ?? null) as number | null;
     this.av3 = (n.av3 ?? n.avance3 ?? null) as number | null;
     this.participacion = (n.part ?? n.participacion ?? null) as number | null;
- 
     this.proyecto = ((n as any).proy ?? (n as any).proyecto ?? (n as any).proyecto_final ?? null) as number | null;
     this.final = (n.final ?? n.nota_final ?? null) as number | null;
   }
@@ -136,7 +150,18 @@ export class RegisterGrades implements OnInit {
 
   guardar(): void {
     if (this.loading) return;
-    if (this.seccionId == null || this.estudianteId == null) return;
+    if (this.seccionId == null) return;
+
+    // Si estoy editando y por algún motivo estudianteId no está, intento inferirlo
+    if (this.editId && this.estudianteId == null) {
+      const row = this.notas.find(x => x.id === this.editId);
+      if (row && typeof row.estudiante === 'number') {
+        this.estudianteId = row.estudiante;
+      }
+    }
+
+    if (this.estudianteId == null) return; // crear/editar siempre requiere estudiante
+
     if (!this.formTieneAlgunaNota()) return;
 
     // Mapeo EXACTO al backend
@@ -153,8 +178,8 @@ export class RegisterGrades implements OnInit {
 
     this.loading = true;
     const obs = this.editId
-      ? this.api.actualizarNota(this.editId, dto) 
-      : this.api.crearNota(dto); 
+      ? this.api.actualizarNota(this.editId, dto)
+      : this.api.crearNota(dto);
 
     obs.subscribe({
       next: () => {
