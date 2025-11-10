@@ -1,219 +1,193 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { ApiService } from '../../api.service';
-
-type Num = number | null;
-
-interface SeccionOpt {
-  id: number;
-  nombre: string;
-  curso_codigo?: string;
-  curso?: { codigo: string };
-}
-
-interface StudentOpt {
-  id: number;
-  codigo: string;
-  nombre?: string;
-  nombres?: string;
-  apellido?: string;
-  apellidos?: string;
-}
-
-interface NotaRow {
-  id: number;
-  estudiante_id: number;
-  estudiante_codigo: string;
-  estudiante_nombre: string;
-  av1: number;
-  av2: number;
-  av3: number;
-  participacion: number;
-  proyecto: number;
-  final: number;
-}
+import {
+  ApiService,
+  SeccionApi,
+  EstudianteApi,
+  NotaApi,
+} from '../../api.service';
 
 @Component({
   selector: 'app-register-grades',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './register-grades.html',
 })
 export class RegisterGrades implements OnInit {
-  // Selects
-  secciones: SeccionOpt[] = [];
-  estudiantes: StudentOpt[] = [];
+  // combos
+  secciones: SeccionApi[] = [];
+  estudiantes: EstudianteApi[] = [];
 
+  // selección
   seccionId: number | null = null;
+  seccionNombre: string | null = null;
   estudianteId: number | null = null;
 
-  // Form
-  av1: Num = 0;
-  av2: Num = 0;
-  av3: Num = 0;
-  participacion: Num = 0;
-  proyecto: Num = 0;
-  final: Num = 0;
+  // formulario de notas
+  av1: number | null = null;
+  av2: number | null = null;
+  av3: number | null = null;
+  participacion: number | null = null;
+  proyecto: number | null = null;
+  final: number | null = null;
 
-  // Tabla
-  filas: NotaRow[] = [];
+  // tabla
+  notas: NotaApi[] = [];
 
-  // Estado
-  loading = false;
+  // estado
   editId: number | null = null;
+  loading = false;
 
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
-    this.cargarSecciones();
-  }
-
-  // ---------------------------
-  // Cargas iniciales
-  // ---------------------------
-  cargarSecciones() {
-    this.api.secciones().subscribe((arr: any[]) => {
-      this.secciones = (arr || []).map((s: any) => ({
-        id: s.id,
-        nombre: s.nombre,
-        curso_codigo: s.curso_codigo ?? s.curso?.codigo ?? '',
-        curso: s.curso,
-      }));
+    this.api.secciones({ page_size: 1000 }).subscribe({
+      next: (arr) => (this.secciones = arr),
+      error: () => (this.secciones = []),
     });
   }
 
-  onSeccionChange() {
-    this.estudianteId = null;
-    this.limpiar(false);
-    this.estudiantes = [];
-    this.filas = [];
-    if (!this.seccionId) return;
-
-    this.api.estudiantes(this.seccionId).subscribe((arr: any[]) => {
-      this.estudiantes = (arr || []).map((e: any) => ({
-        id: e.id,
-        codigo: e.codigo,
-        nombre: e.nombre,
-        nombres: e.nombres,
-        apellido: e.apellido,
-        apellidos: e.apellidos,
-      }));
-    });
-
-    this.refrescarTabla();
+  // Helpers
+  getCursoCode(s: SeccionApi): string {
+    const c: any = (s as any).curso;
+    if (c && typeof c === 'object' && 'codigo' in c) return String(c.codigo);
+    if (typeof c === 'string' || typeof c === 'number') return String(c);
+    return '';
   }
 
-  refrescarTabla() {
-    if (!this.seccionId) {
-      this.filas = [];
+  studentName(e: EstudianteApi): string {
+    const a: any = e as any;
+    const ap = a.apellido ?? a.apellidos ?? '';
+    const no = a.nombre ?? a.nombres ?? '';
+    return [ap, no].filter(Boolean).join(ap && no ? ', ' : '');
+  }
+
+  onSeccionChange(): void {
+    if (this.seccionId == null) {
+      this.estudiantes = [];
+      this.notas = [];
       return;
     }
-    this.api.notas({ seccionId: this.seccionId, page_size: 1000 }).subscribe((resp: any) => {
-      const resultados = Array.isArray(resp?.results) ? resp.results : Array.isArray(resp) ? resp : [];
-      this.filas = resultados.map((n: any) => {
-        const est = this.estudiantes.find(e => e.id === n.estudiante) as StudentOpt | undefined;
-        const estNombre = `${est?.apellido ?? est?.apellidos ?? ''}${
-          (est?.apellido || est?.apellidos) ? ', ' : ''
-        }${est?.nombre ?? est?.nombres ?? ''}`.trim();
+    this.cargarEstudiantes(this.seccionId);
+    this.cargarNotas(this.seccionId);
+    this.estudianteId = null;
+    this.resetFormValuesOnly();
+    this.editId = null;
+  }
 
-        return {
-          id: n.id,
-          estudiante_id: n.estudiante,
-          estudiante_codigo: est?.codigo ?? '',
-          estudiante_nombre: estNombre,
-          av1: Number(n.av1 ?? n.avance1 ?? 0),
-          av2: Number(n.av2 ?? n.avance2 ?? 0),
-          av3: Number(n.av3 ?? n.avance3 ?? 0),
-          participacion: Number(n.participacion ?? 0),
-          proyecto: Number(n.proyecto ?? n.proyecto_final ?? 0),
-          final: Number(n.final ?? n.nota_final ?? 0),
-        } as NotaRow;
-      });
+  private cargarEstudiantes(seccionId: number): void {
+    this.api.estudiantes(seccionId, 1000).subscribe({
+      next: (arr) => (this.estudiantes = arr),
+      error: () => (this.estudiantes = []),
     });
   }
 
-  // ---------------------------
-  // Acciones
-  // ---------------------------
-  tieneValores(): boolean {
-    return true;
+  private cargarNotas(seccionId: number): void {
+    this.api.notas({ seccion: seccionId as any, page_size: 1000 }).subscribe({
+      next: (res: any) => {
+        const list = Array.isArray(res) ? res : res?.results ?? [];
+        this.notas = list as NotaApi[];
+      },
+      error: () => (this.notas = []),
+    });
   }
 
-  editar(n: NotaRow) {
+  editar(n: NotaApi): void {
+    // 👉 aseguramos que el botón Guardar se habilite
     this.editId = n.id;
-    this.estudianteId = n.estudiante_id; 
-    this.av1 = n.av1;
-    this.av2 = n.av2;
-    this.av3 = n.av3;
-    this.participacion = n.participacion;
-    this.proyecto = n.proyecto;
-    this.final = n.final;
+
+    // setear el estudiante/ sección de la fila seleccionada
+    if (typeof n.estudiante === 'number') {
+      this.estudianteId = n.estudiante;
+    }
+    if (typeof n.seccion === 'number') {
+      // por consistencia; si cambias de sección, se recargan alumnos/notas
+      if (this.seccionId !== n.seccion) {
+        this.seccionId = n.seccion;
+        this.onSeccionChange();
+      }
+    }
+
+    // llenar campos
+    this.av1 = (n.av1 ?? n.avance1 ?? null) as number | null;
+    this.av2 = (n.av2 ?? n.avance2 ?? null) as number | null;
+    this.av3 = (n.av3 ?? n.avance3 ?? null) as number | null;
+    this.participacion = (n.part ?? n.participacion ?? null) as number | null;
+    this.proyecto = ((n as any).proy ?? (n as any).proyecto ?? (n as any).proyecto_final ?? null) as number | null;
+    this.final = (n.final ?? n.nota_final ?? null) as number | null;
   }
 
-  eliminar(id: number) {
-    if (!confirm('¿Eliminar esta nota?')) return;
-    this.loading = true;
+  eliminar(id: number): void {
+    if (!confirm('¿Eliminar la nota?')) return;
     this.api.eliminarNota(id).subscribe({
       next: () => {
-        this.loading = false;
-        this.refrescarTabla();
-        if (this.editId === id) this.limpiar(false);
+        if (this.seccionId != null) this.cargarNotas(this.seccionId);
       },
-      error: () => (this.loading = false),
     });
   }
 
-  guardar() {
-    if (!this.seccionId) return;
+  limpiar(): void {
+    this.editId = null;
+    this.estudianteId = null;
+    this.resetFormValuesOnly();
+  }
 
-    // -------- DTOs según ApiService (front) --------
-    const dtoUpdate = {
-      av1: Number(this.av1 ?? 0),
-      av2: Number(this.av2 ?? 0),
-      av3: Number(this.av3 ?? 0),
-      participacion: Number(this.participacion ?? 0),
-      proyecto: Number(this.proyecto ?? 0),
-      final: Number(this.final ?? 0),
+  private resetFormValuesOnly(): void {
+    this.av1 = this.av2 = this.av3 = null;
+    this.participacion = this.proyecto = this.final = null;
+  }
+
+  formTieneAlgunaNota(): boolean {
+    const v = [this.av1, this.av2, this.av3, this.participacion, this.proyecto, this.final];
+    return v.some((x) => x != null);
+  }
+
+  valProyecto(n: NotaApi): number | string {
+    const a: any = n as any;
+    return a.proy ?? a.proyecto ?? a.proyecto_final ?? '';
+  }
+
+  guardar(): void {
+    if (this.loading) return;
+    if (this.seccionId == null) return;
+
+    // Si estoy editando y por algún motivo estudianteId no está, intento inferirlo
+    if (this.editId && this.estudianteId == null) {
+      const row = this.notas.find(x => x.id === this.editId);
+      if (row && typeof row.estudiante === 'number') {
+        this.estudianteId = row.estudiante;
+      }
+    }
+
+    if (this.estudianteId == null) return; // crear/editar siempre requiere estudiante
+
+    if (!this.formTieneAlgunaNota()) return;
+
+    // Mapeo EXACTO al backend
+    const dto = {
+      seccion: this.seccionId,
+      estudiante: this.estudianteId,
+      avance1: this.av1,
+      avance2: this.av2,
+      avance3: this.av3,
+      participacion: this.participacion,
+      proyecto_final: this.proyecto,
+      nota_final: this.final,
     };
-
-    const dtoCreate = {
-      seccionId: this.seccionId as number,
-      estudianteId: this.estudianteId as number,
-      av1: dtoUpdate.av1,
-      av2: dtoUpdate.av2,
-      av3: dtoUpdate.av3,
-      participacion: dtoUpdate.participacion,
-      proyecto: dtoUpdate.proyecto,
-      final: dtoUpdate.final,
-    };
-
-    // Si estamos creando y no hay estudiante, no enviamos
-    if (!this.editId && !this.estudianteId) return;
 
     this.loading = true;
-    const req$ = this.editId
-      ? this.api.actualizarNota(this.editId, dtoUpdate) // PUT con nombres del front
-      : this.api.crearNota(dtoCreate);                   // POST con seccionId/estudianteId
+    const obs = this.editId
+      ? this.api.actualizarNota(this.editId, dto)
+      : this.api.crearNota(dto);
 
-    req$.subscribe({
+    obs.subscribe({
       next: () => {
-        this.loading = false;
-        this.refrescarTabla();
+        if (this.seccionId != null) this.cargarNotas(this.seccionId);
+        this.resetFormValuesOnly();
+        this.editId = null;
       },
-      error: () => (this.loading = false),
+      complete: () => (this.loading = false),
     });
-  }
-
-  limpiar(resetEstudiante = true) {
-    if (resetEstudiante) this.estudianteId = null;
-    this.editId = null;
-    this.av1 = 0;
-    this.av2 = 0;
-    this.av3 = 0;
-    this.participacion = 0;
-    this.proyecto = 0;
-    this.final = 0;
   }
 }

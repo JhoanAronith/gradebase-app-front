@@ -1,75 +1,100 @@
-<div class="container my-4" style="max-width:1100px;">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Notas</h2>
-  </div>
+<div class="container my-4">
+  <h2 class="mb-3">Reporte de Notas</h2>
 
-  <div class="row g-2 mb-3">
+  <div class="row g-3 align-items-end">
     <div class="col-md-3">
-      <input class="form-control" placeholder="Curso (FS)" [(ngModel)]="curso">
+      <label class="form-label">Curso (código)</label>
+      <input class="form-control" [(ngModel)]="curso" name="curso" placeholder="MS00, IA, FS" />
     </div>
     <div class="col-md-3">
-      <input class="form-control" placeholder="Sección (A)" [(ngModel)]="seccion">
+      <label class="form-label">Sección (nombre)</label>
+      <input class="form-control" [(ngModel)]="seccionNombre" name="seccionNombre" placeholder="A, B, 22, 2024-1" />
+      <small class="text-muted">Si no tienes ID de sección, usa el nombre</small>
     </div>
     <div class="col-md-3">
-      <input class="form-control" placeholder="Código estudiante (U12345678)" [(ngModel)]="codigo">
+      <label class="form-label">Código estudiante</label>
+      <input class="form-control" [(ngModel)]="codigo" name="codigo" placeholder="U12345678" />
     </div>
     <div class="col-md-3">
-      <button class="btn btn-primary w-100" [disabled]="loading" (click)="filtrar()">Filtrar</button>
+      <button class="btn btn-primary w-100" (click)="buscar()" [disabled]="loading">Filtrar</button>
     </div>
   </div>
 
-  <div class="mb-2">
-    <button class="btn btn-outline-secondary me-2" [disabled]="loading || !filas.length" (click)="exportar('csv')">CSV</button>
-    <button class="btn btn-outline-secondary me-2" [disabled]="loading || !filas.length" (click)="exportar('xlsx')">XLSX</button>
-    <button class="btn btn-outline-secondary" [disabled]="loading || !filas.length" (click)="exportar('pdf')">PDF</button>
+  <div class="mt-2 text-muted" *ngIf="seccionId">
+    <small>seccion_id detectado: <strong>{{ seccionId }}</strong></small>
   </div>
 
-  <div class="mb-2">
-    <button class="btn btn-info me-2"
-            [disabled]="loading || !curso || !seccion || (filas.length) < 5"
-            (click)="runProyeccion()">ML: Proyección</button>
-    <button class="btn btn-warning"
-            [disabled]="loading || !curso || !seccion || (filas.length) < 5"
-            (click)="runRiesgo()">ML: Riesgo</button>
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-outline-secondary" (click)="exportar('csv')" [disabled]="loading">Exportar CSV</button>
+    <button class="btn btn-outline-secondary" (click)="exportar('xlsx')" [disabled]="loading">Exportar XLSX</button>
+    <button class="btn btn-outline-secondary" (click)="exportar('pdf')" [disabled]="loading">Exportar PDF</button>
   </div>
 
-  <table class="table table-bordered table-striped mt-3" *ngIf="filas.length; else noRows">
-    <thead class="table-light">
-      <tr>
-        <th>Código</th>
-        <th>Alumno</th>
-        <th>Curso</th>
-        <th>Sección</th>
-        <th>Av1</th>
-        <th>Av2</th>
-        <th>Av3</th>
-        <th>Part</th>
-        <th>Proyecto</th>
-        <th>Final</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let n of filas">
-        <td>{{ n.codigo }}</td>
-        <td>{{ n.alumno }}</td>
-        <td>{{ n.curso }}</td>
-        <td>{{ n.seccion }}</td>
-        <td>{{ n.av1 }}</td>
-        <td>{{ n.av2 }}</td>
-        <td>{{ n.av3 }}</td>
-        <td>{{ n.part }}</td>
-        <td>{{ n.proy }}</td>
-        <td>{{ n.final }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="mt-3">
+    <button class="btn btn-info me-2" (click)="runProyeccion()" [disabled]="!canRunML || loading">ML: Proyección</button>
+    <button class="btn btn-warning" (click)="runRiesgo()" [disabled]="!canRunML || loading">ML: Riesgo</button>
+    <div class="mt-2" [class.text-muted]="mlMsg.startsWith('OK')" [class.text-danger]="!mlMsg.startsWith('OK')">
+      {{ mlMsg }}
+    </div>
+    <small *ngIf="!canRunML" class="text-muted d-block mt-1">
+      Requiere <code>seccion_id</code> (usa Filtrar) o ingresar <code>curso</code> y <code>seccion</code>.
+    </small>
+  </div>
 
+  <div class="table-responsive mt-3" *ngIf="filas.length; else noRows">
+    <table class="table table-bordered table-striped">
+      <thead class="table-light">
+        <tr>
+          <th>Código</th>
+          <th>Alumno</th>
+          <th>Curso</th>
+          <th>Sección</th>
+          <th>Av1</th>
+          <th>Av2</th>
+          <th>Av3</th>
+          <th>Part.</th>
+          <th>Proyecto</th>
+          <th>Final</th>
+
+          <!-- Nuevas columnas cuando haya resultados ML -->
+          <th *ngIf="mlProj">Proyección ML</th>
+          <th *ngIf="mlRisk">Riesgo ML</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let n of filas">
+          <td>{{ n.codigo }}</td>
+          <td>{{ n.alumno }}</td>
+          <td>{{ n.curso }}</td>
+          <td>{{ n.seccion }}</td>
+          <td>{{ n.av1 }}</td>
+          <td>{{ n.av2 }}</td>
+          <td>{{ n.av3 }}</td>
+          <td>{{ n.part }}</td>
+          <td>{{ n.proy }}</td>
+          <td>{{ n.final }}</td>
+
+          <!-- Proyección ML por código -->
+          <td *ngIf="mlProj">
+            <ng-container *ngIf="getPred(n.codigo) as pred; else noPred">
+              {{ pred | number:'1.0-2' }}
+            </ng-container>
+            <ng-template #noPred>—</ng-template>
+          </td>
+
+          <!-- Riesgo ML por código con badge -->
+          <td *ngIf="mlRisk">
+            <ng-container *ngIf="getRisk(n.codigo) as r; else noRisk">
+              <span [ngClass]="badgeClass(r.clase)">{{ r.clase }}</span>
+              <small class="text-muted d-block">{{ (r.p * 100) | number:'1.0-1' }}%</small>
+            </ng-container>
+            <ng-template #noRisk>—</ng-template>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
   <ng-template #noRows>
-    <div class="alert alert-light">No hay datos para mostrar. Ajusta los filtros y presiona <b>Filtrar</b>.</div>
+    <div class="text-muted">Sin datos. Usa los filtros y presiona “Filtrar”.</div>
   </ng-template>
-
-  <div class="mt-4 border rounded p-3" *ngIf="mlMsg">
-    <h3>Resultado ML</h3>
-    <p>{{ mlMsg }}</p>
-  </div>
 </div>
