@@ -1,0 +1,5 @@
+services:
+  - type: static
+    name: gradebase-app
+    buildCommand: npm ci && npm run build
+    publishPath: dist/gradebase-app
