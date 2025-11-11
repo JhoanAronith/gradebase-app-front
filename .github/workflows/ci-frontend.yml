@@ -1,0 +1,32 @@
+name: CI Angular Frontend
+
+on:
+  push:
+    branches: [ master ]   # Se ejecuta cuando haces push a main
+  pull_request:           # También en pull requests
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'  # Angular 20 usa Node 20 por defecto
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar versión de Angular
+        run: npx ng version
+
+      - name: Compilar proyecto Angular
+        run: npm run build --if-present
+
+      - name: Ejecutar tests
+        run: npm test -- --watch=false --browsers=ChromeHeadless
