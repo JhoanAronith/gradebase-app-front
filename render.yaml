@@ -3,3 +3,7 @@ services:
     name: gradebase-app
     buildCommand: npm ci && npm run build
     publishPath: dist/gradebase-app
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
