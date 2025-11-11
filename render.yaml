@@ -1,7 +1,7 @@
 services:
   - type: static
     name: gradebase-app
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npm run build -- --output-path=dist/gradebase-app
     publishPath: dist/gradebase-app
     routes:
       - type: rewrite
