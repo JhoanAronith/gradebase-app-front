@@ -6,6 +6,7 @@ import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
+  standalone: true,
   imports: [RouterOutlet, NavBar, NavBarGrades],
   templateUrl: './app.html',
   styleUrls: ['./app.css'],
