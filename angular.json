@@ -25,7 +25,7 @@
                 "input": "public"
               },
               {
-                "glob": "static.json",
+                "glob": "_redirects",
                 "input": "./",
                 "output": "."
               }
