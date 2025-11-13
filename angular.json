@@ -24,7 +24,7 @@
                 "glob": "**/*",
                 "input": "public"
               },
-              "static.json"
+              "src/static.json"
             ],
             "styles": [
               "node_modules/bootstrap/dist/css/bootstrap.min.css",
