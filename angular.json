@@ -28,6 +28,11 @@
                 "glob": "_redirects",
                 "input": "./",
                 "output": "."
+              },
+              {
+                "glob": "static.json",
+                "input": "./",
+                "output": "."
               }
             ],
             "styles": [
