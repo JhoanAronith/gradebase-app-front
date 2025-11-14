@@ -32,8 +32,8 @@ export class Register {
     this.api.registerDocente({
       username: this.username,
       password: this.password,
-      first_name: this.nombre,
-      last_name: this.apellido,
+      nombre: this.nombre,
+      apellido: this.apellido,
       email: this.email,
     }).subscribe({
       next: () => {

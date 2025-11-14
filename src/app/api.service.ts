@@ -237,17 +237,17 @@ export class ApiService {
     username: string;
     password: string;
     email: string;
-    first_name?: string;
-    last_name?: string;
-    nombres?: string;
-    apellidos?: string;
+    nombre?: string;
+    apellido?: string;
+    /*nombres?: string;
+    apellidos?: string;*/
   }) {
     const payload = {
       username: data.username,
       password: data.password,
       email: data.email,
-      first_name: data.first_name ?? data.nombres ?? '',
-      last_name: data.last_name ?? data.apellidos ?? '',
+      nombre: data.nombre ?? '',
+      apellido: data.apellido ?? '',
     };
     return this.http.post(`${this.baseUrl}/auth/register/`, payload);
   }
