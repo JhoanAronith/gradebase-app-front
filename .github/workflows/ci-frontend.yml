@@ -25,7 +25,5 @@ jobs:
 
       - name: Compilar proyecto Angular
         run: npm run build --if-present
-
-      # Si aún no tienes tests configurados, deja esto comentado:
-      # - name: Ejecutar tests
-      #   run: npm test -- --watch=false --browsers=ChromeHeadless
+      - name: Ejecutar tests
+        run: npm test -- --watch=false --browsers=ChromeHeadless
