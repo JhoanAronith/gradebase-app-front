@@ -7,11 +7,12 @@ import {
   EstudianteApi,
   NotaApi,
 } from '../../api.service';
+import { RangoNotaDirective } from '../../directives/rango-nota';
 
 @Component({
   selector: 'app-register-grades',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RangoNotaDirective],
   templateUrl: './register-grades.html',
 })
 export class RegisterGrades implements OnInit {
