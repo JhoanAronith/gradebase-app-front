@@ -84,7 +84,7 @@ export class RegisterGrades implements OnInit {
   }
 
   private cargarNotas(seccionId: number): void {
-    this.api.notas({ seccion: seccionId as any, page_size: 1000 }).subscribe({
+    this.api.notas({ seccion: this.seccionId as any, page_size: 1000 }).subscribe({
       next: (res: any) => {
         const list = Array.isArray(res) ? res : res?.results ?? [];
         this.notas = list as NotaApi[];
@@ -94,22 +94,18 @@ export class RegisterGrades implements OnInit {
   }
 
   editar(n: NotaApi): void {
-    // 👉 aseguramos que el botón Guardar se habilite
     this.editId = n.id;
 
-    // setear el estudiante/ sección de la fila seleccionada
     if (typeof n.estudiante === 'number') {
       this.estudianteId = n.estudiante;
     }
     if (typeof n.seccion === 'number') {
-      // por consistencia; si cambias de sección, se recargan alumnos/notas
       if (this.seccionId !== n.seccion) {
         this.seccionId = n.seccion;
         this.onSeccionChange();
       }
     }
 
-    // llenar campos
     this.av1 = (n.av1 ?? n.avance1 ?? null) as number | null;
     this.av2 = (n.av2 ?? n.avance2 ?? null) as number | null;
     this.av3 = (n.av3 ?? n.avance3 ?? null) as number | null;
@@ -152,7 +148,6 @@ export class RegisterGrades implements OnInit {
     if (this.loading) return;
     if (this.seccionId == null) return;
 
-    // Si estoy editando y por algún motivo estudianteId no está, intento inferirlo
     if (this.editId && this.estudianteId == null) {
       const row = this.notas.find(x => x.id === this.editId);
       if (row && typeof row.estudiante === 'number') {
@@ -160,11 +155,9 @@ export class RegisterGrades implements OnInit {
       }
     }
 
-    if (this.estudianteId == null) return; // crear/editar siempre requiere estudiante
-
+    if (this.estudianteId == null) return;
     if (!this.formTieneAlgunaNota()) return;
 
-    // Mapeo EXACTO al backend
     const dto = {
       seccion: this.seccionId,
       estudiante: this.estudianteId,
@@ -189,5 +182,12 @@ export class RegisterGrades implements OnInit {
       },
       complete: () => (this.loading = false),
     });
+  }
+
+  validarNota(valor: number): number | null {
+    if (valor == null) return null;
+    if (valor < 0) return 0;
+    if (valor > 20) return 20;
+    return valor;
   }
 }
